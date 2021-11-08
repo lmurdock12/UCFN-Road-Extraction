@@ -2,3 +2,4 @@
 /train
 /valid
 __pycache__/
+/nets

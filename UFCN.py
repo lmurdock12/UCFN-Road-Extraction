@@ -1,6 +1,6 @@
 
 import os
-
+import datetime
 import torch
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -17,6 +17,8 @@ import numpy as np
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def imshow(img):
+    #imshow(outputs[0])
+    #print(torch.round(outputs[0]))
     with torch.no_grad():
         img = img.cpu()
         img = img /2 + 0.5 #unnormalize
@@ -24,6 +26,17 @@ def imshow(img):
         plt.imshow(np.transpose(npimg,(1,2,0)))
         plt.show()
 
+def imgShowDouble(img1,img2):
+    with torch.no_grad():
+        img1 = img1.cpu().numpy()
+        img2 = img2.cpu().numpy()
+
+        f = plt.figure()
+        f.add_subplot(1,2,1)
+        plt.imshow(np.rot90(img1,2))
+        f.add_subplot(1,2,2)
+        plt.imshow(np.rot90(img2,2))
+        plt.show(block=True)
 
 
 """
@@ -127,76 +140,114 @@ class ConvNet(nn.Module):
         return x
 
 
-#Upon loading images we resize, convert to tensor, and normalize all the images
-sampleTransformations = transforms.Compose([
-    transforms.Resize(512),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=(0.5,0.5,0.5),std=(0.5,0.5,0.5))
-])
+def train_net(batch_size=3,save_path="./cnn.pth"):
 
-targetTransformations = transforms.Compose([
-    transforms.Resize(512),
-    transforms.Grayscale(num_output_channels=1),
-    transforms.ToTensor()#,
-    #transforms.Normalize(mean=(0.5),std=(0.5))
-])
+    #Upon loading images we resize, convert to tensor, and normalize all the images
+    sampleTransformations = transforms.Compose([
+        transforms.Resize(512),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.5,0.5,0.5),std=(0.5,0.5,0.5))
+    ])
 
-
-trainingDataSet = RoadDatasetFolder(os.getcwd() + "\\train",default_loader,transform=sampleTransformations,target_transform=targetTransformations)
-trainingDataLoader = data.DataLoader(dataset=trainingDataSet,batch_size=2,shuffle=True)
-
-num_epochs = 5000
-batch_size = 1
-learning_rate = .001
-
-model = ConvNet().to(device)
-
-criterion = nn.BCELoss()
-optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
-
-sampleImages,targetImages = next(iter(trainingDataLoader))
-
-#n_total_steps = len(trainingDataLoader)
-for epoch in range(num_epochs):
-
-    sampleImages = sampleImages.to(device)
-    targetImages = targetImages.to(device)
-
-    #Forward pass
-    outputs = model(sampleImages)
-
-    loss = criterion(outputs,targetImages)
-
-    # Backward and optimize
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    print(f'Epoch[{epoch+1}], Step [1], Loss: {loss.item():.4f}')
-    if loss.item() < .001:
-        break
-
-print("Finished Training")
-
-final = model(sampleImages)
-imshow(torch.round(final[0]))
+    targetTransformations = transforms.Compose([
+        transforms.Resize(512),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.ToTensor()#,
+        #transforms.Normalize(mean=(0.5),std=(0.5))
+    ])
 
 
+    trainingDataSet = RoadDatasetFolder(os.getcwd() + "\\train",default_loader,transform=sampleTransformations,target_transform=targetTransformations)
+    trainingDataLoader = data.DataLoader(dataset=trainingDataSet,batch_size=batch_size,shuffle=True)
 
-PATH = './cnn.pth'
-torch.save(model.state_dict(),PATH)
+    num_epochs = 750
+    batch_size = 1
+    learning_rate = .001
+
+    model = ConvNet().to(device)
+
+    criterion = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(),lr=learning_rate)
+
+    sampleImages,targetImages = next(iter(trainingDataLoader))
+
+    startTime = datetime.datetime.now()
+
+    #n_total_steps = len(trainingDataLoader)
+    for epoch in range(num_epochs):
+        for i, (sampImages,targImages) in enumerate(trainingDataLoader):
+            if i == 100:
+                break
+
+            sampleImages = sampImages.to(device)
+            targetImages = targImages.to(device)
+
+            #Forward pass
+            outputs = model(sampleImages)
+
+            loss = criterion(outputs,targetImages)
+
+            # Backward and optimize
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            print(f'Epoch[{epoch+1}], Step [{i+1}], Loss: {loss.item():.4f}')
+
+            if epoch % 10 == 0:
+                print(f"Curr time elapsed {datetime.datetime.now()-startTime}")
+
+    print("Finished Training")
+
+
+    PATH = save_path
+    torch.save(model.state_dict(),PATH)
 
 
 
+def test_net(load_path="cnn.pth"):
+
+    model = ConvNet().to(device)
+    model.load_state_dict(torch.load(load_path))
+    model.eval()
+
+    #Upon loading images we resize, convert to tensor, and normalize all the images
+    sampleTransformations = transforms.Compose([
+        transforms.Resize((512,512)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.5,0.5,0.5),std=(0.5,0.5,0.5))
+    ])
+
+    targetTransformations = transforms.Compose([
+        transforms.Resize(512),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.ToTensor()#,
+        #transforms.Normalize(mean=(0.5),std=(0.5))
+    ])
 
 
-# x = x.to(device)
-# y = y.to(device)
+    testingDataSet = RoadDatasetFolder(os.getcwd() + "\\train",default_loader,transform=sampleTransformations,target_transform=targetTransformations)
+    testingDataLoader = data.DataLoader(dataset=testingDataSet,batch_size=1,shuffle=True)
 
-# outputs = model(x)
-# print(outputs.size())
+    for i, (sampImages,targImages) in enumerate(testingDataLoader):
+        if i == 10:
+            exit()
+        
+        sampleImages = sampImages.to(device)
+        targetImages = targImages.to(device)
 
-#imshow(outputs[0])
-#print(torch.round(outputs[0]))
+        #Forward pass
+        outputs = model(sampleImages)
+        #imshow(torch.round(outputs[0]))
+        imgShowDouble(torch.round(outputs[0][0]),targetImages[0][0])
+
+
+#Uncomment to run train_net
+#train_net()
+
+#test_net(load_path="cnn_100imgs_750epochs.pth")
+
+
+
 
 
